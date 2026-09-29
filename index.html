@@ -62,11 +62,29 @@ td.num,th.num{text-align:right}
 tbody tr{cursor:pointer}tbody tr:hover{background:#F4F6FE}
 tbody tr.sel{background:#E9EEFF}
 .src{display:flex;justify-content:space-between;align-items:flex-end;font-size:13px;color:var(--mut);line-height:1.45;border-top:1px solid var(--line);padding-top:12px;margin-top:22px;gap:20px}
-.brand{flex:none;line-height:0}.brand svg{height:22px;width:auto;display:block}
-@media(max-width:700px){.src{flex-direction:column;align-items:flex-start}.brand svg{height:18px}h1{font-size:28px}.sub{font-size:16px}body{padding:20px 14px}}
+.brand{flex:none;line-height:0}.brand svg{height:14px;width:auto;display:block}
+@media(max-width:700px){.src{flex-direction:column;align-items:flex-start}.brand svg{height:12px}h1{font-size:28px}.sub{font-size:16px}body{padding:20px 14px}}
+.emb .mapbox{height:min(56vw,760px);min-height:420px}
+@media(max-width:700px){
+ body{padding:16px 12px 20px}
+ h1{font-size:22px;margin-bottom:8px}
+ .sub{font-size:14px;margin-bottom:10px}
+ .legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:13px;margin-bottom:10px}
+ .legend .it{gap:6px}.legend .it svg{width:22px;height:22px}
+ .legend .sz{grid-column:1/-1;font-size:13px;gap:6px}
+ .mapbox,.emb .mapbox{height:150vw;min-height:460px;max-height:720px}
+ .ctl{top:8px;right:8px;gap:5px}.btn{padding:6px 9px;font-size:13px}
+ .tog{font-size:12px;padding:5px 8px;gap:2px}
+ .card{left:8px;bottom:8px;width:calc(100% - 16px);font-size:13px;padding:10px 12px}
+ .card h3{font-size:17px}
+ .note{font-size:12px}}
+@media(pointer:coarse){.mapbox,svg#map{touch-action:pan-y}}
+.static .ctl,.static .card,.static .clk{display:none!important}
+.static .wrap{max-width:1500px}
+.static .mapbox{width:1500px;height:800px;max-width:none;min-height:0;pointer-events:none}
 </style></head><body><div class="wrap">
 <h1 id="h1"></h1>
-<div class="sub">Circle size = capacity. Colour = status. Dashed lines = distance from Ukraine's border, drawn over Russia only. Click a refinery.</div>
+<div class="sub">Circle size = capacity. Colour = current status. Dashed lines = distance from Ukraine's border.<span class="clk"> Click a refinery for details.</span></div>
 <div class="legend" id="legend"></div>
 <div class="mapbox" id="mapbox">
   <svg id="map" xmlns="http://www.w3.org/2000/svg"><g class="land" id="land"></g><g id="rings"></g><g id="uall"></g><g id="sel"></g><g id="kyiv"></g><g id="mk"></g><g id="labs"></g><g id="ringt"></g></svg>
@@ -295,17 +313,32 @@ function select(id,zoom){selId=id;const r=rows.find(x=>x.id==id);
  <dl><dt>Status</dt><dd><span class="badge b-${r.status}">${st}</span></dd>
  <dt>Capacity</dt><dd>${r.capacity_mt_yr} Mt/yr</dd>
  <dt>To Ukraine</dt><dd>${r.distance_to_ukraine_km.toLocaleString("en-US")} km</dd></dl>
- <p>${r.status_note.split(/\. /)[0].replace(/\.$/,"")}. ${src}</p>`;
+ <p>${r.status_note.replace(/\b(Sept|Sep|Apr|Aug|Oct|Nov|Dec|Jan|Feb|Mar|Jun|Jul)\.\s/g,"$1.\u00a0").split(/\. /)[0].replace(/\.$/,"")}. ${src}</p>`;
  c.style.display="block";$("cx").onclick=()=>select(null);
  if(zoom){const k=K();const w=Math.max(V.w*0.55,Math.min(V.w,220*(svg.clientWidth||1000)/ (svg.clientWidth||1000)*k*6));V.w=Math.min(V.w,Math.max(w,300));V.h=V.w*(svg.clientHeight||600)/(svg.clientWidth||1000);V.x=r.px-V.w/2;V.y=r.py-V.h/2;}
  render();hi();}
 function hi(){}
 // ---- interactions
 let drag=null;
-svg.addEventListener("pointerdown",e=>{drag={x:e.clientX,y:e.clientY,vx:V.x,vy:V.y,m:false};svg.setPointerCapture(e.pointerId)});
-svg.addEventListener("pointermove",e=>{if(!drag)return;const k=K(),dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3){drag.m=true;svg.classList.add("drag")}
+const ptrs=new Map();let pinch=null;
+function startPinch(){const a=[...ptrs.values()],b=svg.getBoundingClientRect();
+ pinch={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,mx:(a[0].x+a[1].x)/2-b.left,my:(a[0].y+a[1].y)/2-b.top,V:{...V}};
+ pinch.ux=pinch.V.x+pinch.mx*(pinch.V.w/(svg.clientWidth||1000));pinch.uy=pinch.V.y+pinch.my*(pinch.V.w/(svg.clientWidth||1000))}
+function movePinch(){const a=[...ptrs.values()],b=svg.getBoundingClientRect(),W=svg.clientWidth||1000,H=svg.clientHeight||600;
+ const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,mx_=(a[0].x+a[1].x)/2-b.left,my_=(a[0].y+a[1].y)/2-b.top;
+ V.w=pinch.V.w*pinch.d/d;V.h=V.w*H/W;const k2=V.w/W;V.x=pinch.ux-mx_*k2;V.y=pinch.uy-my_*k2;render()}
+svg.addEventListener("pointerdown",e=>{ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});   // capture phase: also sees touches that land on markers
+ if(ptrs.size==2){startPinch();drag=null}},true);
+svg.addEventListener("pointerdown",e=>{if(ptrs.size>1)return;svg.setPointerCapture(e.pointerId);
+ drag={x:e.clientX,y:e.clientY,vx:V.x,vy:V.y,m:false}});
+svg.addEventListener("pointermove",e=>{const q=ptrs.get(e.pointerId);if(q){q.x=e.clientX;q.y=e.clientY}
+ if(pinch&&ptrs.size==2){movePinch();return}
+ if(!drag)return;const k=K(),dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3){drag.m=true;svg.classList.add("drag")}
  V.x=drag.vx-dx*k;V.y=drag.vy-dy*k;render()});
-svg.addEventListener("pointerup",e=>{if(drag&&!drag.m)select(null);drag=null;svg.classList.remove("drag")});
+svg.addEventListener("pointerup",e=>{ptrs.delete(e.pointerId);
+ if(pinch){if(ptrs.size<2)pinch=null;drag=null;svg.classList.remove("drag");return}
+ if(drag&&!drag.m)select(null);drag=null;svg.classList.remove("drag")});
+svg.addEventListener("pointercancel",e=>{ptrs.delete(e.pointerId);pinch=null;drag=null;svg.classList.remove("drag")});
 function zoom(f,cx,cy){const k=K();const px=cx==null?(svg.clientWidth/2):cx,py=cy==null?(svg.clientHeight/2):cy;
  const ux=V.x+px*k,uy=V.y+py*k;V.w*=f;V.h*=f;const k2=K();V.x=ux-px*k2;V.y=uy-py*k2;render()}
 svg.addEventListener("wheel",e=>{e.preventDefault();const b=svg.getBoundingClientRect();zoom(e.deltaY>0?1.2:1/1.2,e.clientX-b.left,e.clientY-b.top)},{passive:false});
@@ -329,7 +362,7 @@ window.addEventListener("resize",()=>{render()});
  lg.appendChild(z)})();
 // ---- header
 (function(){const h=rows.filter(r=>r.status=="halted").length+rows.filter(r=>r.status=="reduced").length;
- $("h1").textContent=`${h} of ${rows.length} big Russian refineries are halted or crippled`;
+ $("h1").textContent="Russia's refineries: status and distance from Ukraine";
  $("note").innerHTML=`Status as of ${ASOF}, from media reports; not independently verified. Distance = to Ukraine's recognised territory, not the front line. Coordinates ±5 km; capacity approximate.`;
  $("foot").innerHTML=`Sources: Reuters, Bloomberg, bne IntelliNews, Kyiv Post, Ukrainska Pravda, Kpler`}
 )();
@@ -385,5 +418,8 @@ function buildSVG(){
  return '<?xml version="1.0" encoding="UTF-8"?>\n'+c.outerHTML}
 
 fillTable();
-requestAnimationFrame(()=>fit(13,64,38,66));
+if(self!==top){document.documentElement.classList.add("emb");
+ const postH=()=>{try{parent.postMessage({type:"refinery-map-height",height:document.documentElement.scrollHeight},"*")}catch(e){}};
+ addEventListener("load",postH);addEventListener("resize",postH);if(window.ResizeObserver)new ResizeObserver(postH).observe(document.body)}
+requestAnimationFrame(()=>{if(location.hash=="#static"){document.documentElement.classList.add("static");NOCLAMP=true;LITE=true;fit(21,142,42,69)}else fit(13,64,38,66)});
 </script></body></html>
