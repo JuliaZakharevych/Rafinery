@@ -64,7 +64,6 @@ tbody tr.sel{background:#E9EEFF}
 .src{display:flex;justify-content:space-between;align-items:flex-end;font-size:13px;color:var(--mut);line-height:1.45;border-top:1px solid var(--line);padding-top:12px;margin-top:22px;gap:20px}
 .brand{flex:none;line-height:0}.brand svg{height:22px;width:auto;display:block}
 @media(max-width:700px){.src{flex-direction:column;align-items:flex-start}.brand svg{height:18px}h1{font-size:28px}.sub{font-size:16px}body{padding:20px 14px}}
-.btn:disabled{opacity:.35;cursor:default}
 </style></head><body><div class="wrap">
 <h1 id="h1"></h1>
 <div class="sub">Circle size = capacity. Colour = status. Dashed lines = distance from Ukraine's border, drawn over Russia only. Click a refinery.</div>
@@ -72,7 +71,7 @@ tbody tr.sel{background:#E9EEFF}
 <div class="mapbox" id="mapbox">
   <svg id="map" xmlns="http://www.w3.org/2000/svg"><g class="land" id="land"></g><g id="rings"></g><g id="uall"></g><g id="sel"></g><g id="kyiv"></g><g id="mk"></g><g id="labs"></g><g id="ringt"></g></svg>
   <div class="ctl">
-    <div class="btns"><button class="btn" id="zin">+</button><button class="btn" id="zout">−</button><button class="btn" id="vw">West</button><button class="btn" id="va">East</button></div>
+    <div class="btns"><button class="btn" id="zin">+</button><button class="btn" id="zout">−</button><button class="btn" id="vw">West</button><button class="btn" id="va">All</button></div>
     <div class="tog"><label><input type="checkbox" id="trings" checked> Distance from Ukraine</label><label><input type="checkbox" id="tlabs" checked> Labels</label></div>
   </div>
   <div class="card" id="card"></div>
@@ -148,17 +147,6 @@ function fit(lon0,lon1,lat0,lat1){const W=svg.clientWidth||1000,H=svg.clientHeig
  let w=mx(lon1)-mx(lon0),h=my(lat0)-my(lat1);const a=W/H;if(w/h<a)w=h*a;else h=w/a;
  const cx=(mx(lon0)+mx(lon1))/2,cy=(my(lat0)+my(lat1))/2;V={x:cx-w/2,y:cy-h/2,w,h};render()}
 const K=()=>V.w/(svg.clientWidth||1000);
-// ---- view limits: the camera can never leave the area with data (no empty sea / Arctic / Pacific)
-const BND={lon0:19.5,lon1:140.5,lat0:42.5,lat1:65.5};   // <- edit these 4 numbers to loosen/tighten the frame
-const MIN_W=100;                                          // <- max zoom-in (smaller = closer)
-const BX0=mx(BND.lon0),BX1=mx(BND.lon1),BY0=my(BND.lat1),BY1=my(BND.lat0);
-function limW(){const a=(svg.clientWidth||1000)/(svg.clientHeight||600);return[MIN_W,Math.max(MIN_W,Math.min(BX1-BX0,(BY1-BY0)*a))]}
-function clampView(){const W=svg.clientWidth||1000,H=svg.clientHeight||600,a=W/H,[mn,mxw]=limW();
-  const w=Math.max(mn,Math.min(V.w,mxw));
-  if(w!==V.w){const cx=V.x+V.w/2,cy=V.y+V.h/2;V.w=w;V.x=cx-w/2;V.y=cy-w/a/2}
-  V.h=V.w/a;
-  V.x=Math.min(Math.max(V.x,BX0),Math.max(BX0,BX1-V.w));
-  V.y=Math.min(Math.max(V.y,BY0),Math.max(BY0,BY1-V.h))}
 // ---- state
 let LITE=false;let selId=null;const on={halted:1,reduced:1,hit_unconfirmed:1,operating:1};
 const rows=D.rows.slice().sort((a,b)=>b.capacity_mt_yr-a.capacity_mt_yr);
@@ -189,9 +177,20 @@ rows.slice().sort((a,b)=>RK[a.status]-RK[b.status]||b.capacity_mt_yr-a.capacity_
  r.t2.style.fill=r.status=="operating"?"#6B6760":ST[r.status].c==="#E9A11B"?"#9A6B08":ST[r.status].c;
 });
 function pie(cx,cy,rad,frac){const a=frac*2*Math.PI;const x=cx+rad*Math.sin(a),y=cy-rad*Math.cos(a);return`M${cx},${cy}L${cx},${cy-rad}A${rad},${rad} 0 ${a>Math.PI?1:0} 1 ${x},${y}Z`}
+// ---- view limits: no zoom-out past the data, no panning into empty space
+let NOCLAMP=false;
+const LIM={lon0:20,lon1:142,lat0:40,lat1:70,pad:0,minW:220};
+function clampV(){if(NOCLAMP)return;
+ const W=svg.clientWidth||1000,H=svg.clientHeight||600,a=W/H;
+ const px=(mx(LIM.lon1)-mx(LIM.lon0))*LIM.pad,py=(my(LIM.lat0)-my(LIM.lat1))*LIM.pad;
+ const x0=mx(LIM.lon0)-px,x1=mx(LIM.lon1)+px,y0=my(LIM.lat1)-py,y1=my(LIM.lat0)+py;
+ const bw=x1-x0,bh=y1-y0;
+ const mw=Math.min(bw,bh*a);                             // widest allowed view: never bigger than the bounds
+ V.w=Math.min(Math.max(V.w,LIM.minW),mw);V.h=V.w/a;       // zoom limits
+ V.x=V.w>=bw?x0+bw/2-V.w/2:Math.min(Math.max(V.x,x0),x1-V.w);
+ V.y=V.h>=bh?y0+bh/2-V.h/2:Math.min(Math.max(V.y,y0),y1-V.h)}
 function render(){
- if(!LITE)clampView();
- {const [mn,mxw]=limW();$("zin").disabled=V.w<=mn+0.5;$("zout").disabled=V.w>=mxw-0.5}
+ clampV();
  svg.setAttribute("viewBox",`${V.x} ${V.y} ${V.w} ${V.h}`);
  const k=K(),W=svg.clientWidth,H=svg.clientHeight;
  // country label size
@@ -298,11 +297,11 @@ svg.addEventListener("pointerdown",e=>{drag={x:e.clientX,y:e.clientY,vx:V.x,vy:V
 svg.addEventListener("pointermove",e=>{if(!drag)return;const k=K(),dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3){drag.m=true;svg.classList.add("drag")}
  V.x=drag.vx-dx*k;V.y=drag.vy-dy*k;render()});
 svg.addEventListener("pointerup",e=>{if(drag&&!drag.m)select(null);drag=null;svg.classList.remove("drag")});
-function zoom(f,cx,cy){const [mn,mxw]=limW();f=Math.min(Math.max(V.w*f,mn),mxw)/V.w;if(Math.abs(f-1)<1e-6)return;const k=K();const px=cx==null?(svg.clientWidth/2):cx,py=cy==null?(svg.clientHeight/2):cy;
+function zoom(f,cx,cy){const k=K();const px=cx==null?(svg.clientWidth/2):cx,py=cy==null?(svg.clientHeight/2):cy;
  const ux=V.x+px*k,uy=V.y+py*k;V.w*=f;V.h*=f;const k2=K();V.x=ux-px*k2;V.y=uy-py*k2;render()}
 svg.addEventListener("wheel",e=>{e.preventDefault();const b=svg.getBoundingClientRect();zoom(e.deltaY>0?1.2:1/1.2,e.clientX-b.left,e.clientY-b.top)},{passive:false});
 $("zin").onclick=()=>zoom(1/1.4);$("zout").onclick=()=>zoom(1.4);
-$("vw").onclick=()=>fit(22,66,42,64);$("va").onclick=()=>fit(84,141,42.5,65.5);
+$("vw").onclick=()=>fit(22,66,42,64);$("va").onclick=()=>fit(21,142,42,69);
 $("trings").onchange=render;$("tlabs").onchange=render;
 window.addEventListener("resize",()=>{render()});
 // ---- legend
@@ -331,10 +330,10 @@ function exportSVG(){
  // static picture: fixed wide canvas + fewer labels, independent of the live (vertical) map box
  const keep={V:{...V},lite:LITE,st:box.getAttribute("style")};
  box.style.cssText+=";width:1500px;height:800px;max-width:none;min-height:0";
- LITE=true;fit(21,142,42,69);
+ NOCLAMP=true;LITE=true;fit(21,142,42,69);
  const out=buildSVG();
  LITE=keep.lite;if(keep.st==null)box.removeAttribute("style");else box.setAttribute("style",keep.st);
- V=keep.V;render();return out}
+ V=keep.V;NOCLAMP=false;render();return out}
 function buildSVG(){
  const W=svg.clientWidth,H=svg.clientHeight,k=K();
  const c=svg.cloneNode(true);
