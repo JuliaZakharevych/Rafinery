@@ -277,10 +277,19 @@ function geodesic(lat,lon,km){const R=6371.0088,d=km/R,la=lat*R2,lo=lon*R2,pts=[
   const lo2=lo+Math.atan2(Math.sin(br)*Math.sin(d)*Math.cos(la),Math.cos(d)-Math.sin(la)*Math.sin(la2));pts.push([lo2/R2,la2/R2])}return pts}
 function drawSel(){const g=$("sel");g.innerHTML="";const r=rows.find(x=>x.id==selId);if(!r||!r.distance_to_ukraine_km)return;
  el("path",{d:P(geodesic(r.lat,r.lon,r.distance_to_ukraine_km)),fill:"rgba(11,60,234,.05)",stroke:"#0B3CEA","stroke-width":1.6,"stroke-dasharray":"2 4","vector-effect":"non-scaling-stroke"},g)}
+// ---- source links: Kyiv Independent first, then the original / other outlets
+const OUT={"kyivindependent.com":"Kyiv Independent","kyivpost.com":"Kyiv Post","pravda.com.ua":"Ukrainska Pravda","intellinews.com":"bne IntelliNews","themoscowtimes.com":"Moscow Times","militarnyi.com":"Militarnyi","hromadske.ua":"Hromadske","kpler.com":"Kpler","bloomberg.com":"Bloomberg","reuters.com":"Reuters","chemanalyst.com":"ChemAnalyst","energynewsbeat.co":"Energy News Beat","ua.news":"UA.news","wikipedia.org":"Wikipedia"};
+function outlet(u){try{const h=new URL(u).hostname.replace(/^www\./,"");for(const k in OUT)if(h==k||h.endsWith("."+k))return OUT[k];return h}catch(e){return u}}
+function srcLinks(r){
+ // optional per-row fields: r.ki (Kyiv Independent URL), r.primary (original source URL, e.g. Reuters)
+ const all=[].concat(r.ki||[],r.primary||[],r.sources||[]).filter((u,i,a)=>u&&a.indexOf(u)==i);
+ const rank=u=>/kyivindependent\.com/.test(u)?0:/wikipedia\.org/.test(u)?2:1;
+ const a=(u)=>`<a href="${u}" target="_blank" rel="noopener">${outlet(u)} \u2197</a>`;
+ return all.sort((x,y)=>rank(x)-rank(y)).slice(0,4).map(a).join(" \u00b7 ")}
 function select(id,zoom){selId=id;const r=rows.find(x=>x.id==id);
  const c=$("card");
  if(!r){c.style.display="none";render();hi();return}
- const src=r.sources.slice(0,3).map((u,i)=>`<a href="${u}" target="_blank" rel="noopener">[${i+1}]</a>`).join(" ");
+ const src=srcLinks(r);
  const st=r.status=="halted"?"Halted "+fd(r.status_since):r.status=="reduced"?"~"+(100-r.offline_share_pct)+"% running":ST[r.status].l;
  c.innerHTML=`<span class="x" id="cx">×</span><h3>${r.name}</h3><div class="m">${r.owner}</div>
  <dl><dt>Status</dt><dd><span class="badge b-${r.status}">${st}</span></dd>
@@ -322,7 +331,7 @@ window.addEventListener("resize",()=>{render()});
 (function(){const h=rows.filter(r=>r.status=="halted").length+rows.filter(r=>r.status=="reduced").length;
  $("h1").textContent=`${h} of ${rows.length} big Russian refineries are halted or crippled`;
  $("note").innerHTML=`Status as of ${ASOF}, from media reports; not independently verified. Distance = to Ukraine's recognised territory, not the front line. Coordinates ±5 km; capacity approximate.`;
- $("foot").innerHTML=`Sources: Reuters, Bloomberg, bne IntelliNews, Kyiv Independent, Kyiv Post, Ukrainska Pravda, Kpler`}
+ $("foot").innerHTML=`Sources: Reuters, Bloomberg, bne IntelliNews, Kyiv Post, Ukrainska Pravda, Kpler`}
 )();
 function fillTable(){}
 // ---- SVG export for Figma: static, styles inlined, named layers
